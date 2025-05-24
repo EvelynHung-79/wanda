@@ -39,7 +39,7 @@ def eval_ppl_wikitext_train(model, trainloader, bs=1, device=None):
 
     # List to store negative log likelihoods
     nlls = []
-    print(f"nsamples {nsamples}")
+    print(f"num_samples {nsamples}")
 
     # Loop through each batch
     for i in range(0,nsamples,bs):
@@ -89,7 +89,7 @@ def eval_ppl_wikitext(model, testenc, bs=1, device=None):
 
     # List to store negative log likelihoods
     nlls = []
-    print(f"nsamples {nsamples}")
+    print(f"num_samples {nsamples}")
 
     # Loop through each batch
     for i in range(0,nsamples,bs):

@@ -4,6 +4,9 @@ import numpy as np
 import random
 import torch
 from datasets import load_dataset
+import json
+import gzip
+import pandas as pd
 
 # Set seed for reproducibility
 def set_seed(seed):
@@ -17,13 +20,17 @@ class TokenizerWrapper:
 
 # Load and process wikitext2 dataset
 def get_wikitext2(nsamples, seed, seqlen, tokenizer):
-    # Load train and test datasets
-    traindata = load_dataset('wikitext', 'wikitext-2-raw-v1', split='train')
-    testdata = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
+    # Load train and test datasets from local parquet files using pandas
+    traindata = pd.read_parquet('./wikitext2_dataset/train-00000-of-00001.parquet')
+    testdata = pd.read_parquet('./wikitext2_dataset/test-00000-of-00001.parquet')
+
+    # Convert to list of texts
+    train_texts = traindata['text'].tolist()
+    test_texts = testdata['text'].tolist()
 
     # Encode datasets
-    trainenc = tokenizer(" ".join(traindata['text']), return_tensors='pt')
-    testenc = tokenizer("\n\n".join(testdata['text']), return_tensors='pt')
+    trainenc = tokenizer(" ".join(train_texts), return_tensors='pt')
+    testenc = tokenizer("\n\n".join(test_texts), return_tensors='pt')
 
     # Generate samples from training set
     random.seed(seed)
@@ -39,9 +46,16 @@ def get_wikitext2(nsamples, seed, seqlen, tokenizer):
 
 # Load and process c4 dataset
 def get_c4(nsamples, seed, seqlen, tokenizer):
-    # Load train and validation datasets
-    traindata = load_dataset('allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train')
-    valdata = load_dataset('allenai/c4', 'allenai--c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation')
+    # Load train and validation datasets directly from gzipped JSON files
+    def load_gzipped_json(file_path):
+        data = []
+        with gzip.open(file_path, 'rt', encoding='utf-8') as f:
+            for line in f:
+                data.append(json.loads(line))
+        return data
+
+    traindata = load_gzipped_json('./en/c4-train.00000-of-01024.json.gz')
+    valdata = load_gzipped_json('./en/c4-validation.00000-of-00008.json.gz')
 
     # Generate samples from training set
     random.seed(seed)
@@ -60,7 +74,8 @@ def get_c4(nsamples, seed, seqlen, tokenizer):
         trainloader.append((inp, tar))
 
     # Prepare validation dataset
-    valenc = tokenizer(' '.join(valdata[:1100]['text']), return_tensors='pt')
+    # valenc = tokenizer(' '.join(valdata[:1100]['text']), return_tensors='pt')
+    valenc = tokenizer(' '.join([x['text'] for x in valdata[:1100]]), return_tensors='pt')
     valenc = valenc.input_ids[:, :(256 * seqlen)]
     valenc = TokenizerWrapper(valenc)
     return trainloader, valenc
