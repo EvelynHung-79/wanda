@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from importlib.metadata import version
+from huggingface_hub import snapshot_download
 
 from lib.prune import prune_wanda, prune_magnitude, prune_sparsegpt, prune_ablate, check_sparsity, find_layers
 from lib.eval import eval_ppl, eval_zero_shot
@@ -41,7 +42,7 @@ def main():
 
     parser.add_argument("--eval_zero_shot", action="store_true")
     args = parser.parse_args()
-
+    
     # Setting seeds for reproducibility
     np.random.seed(args.seed)
     torch.random.manual_seed(args.seed)
@@ -83,12 +84,22 @@ def main():
     ppl_test = eval_ppl(args, model, tokenizer, device)
     print(f"wikitext perplexity {ppl_test}")
 
-    if not os.path.exists(args.save):
-        os.makedirs(args.save)
-    save_filepath = os.path.join(args.save, f"log_{args.prune_method}.txt")
-    with open(save_filepath, "w") as f:
-        print("method\tactual_sparsity\tppl_test", file=f, flush=True)
-        print(f"{args.prune_method}\t{sparsity_ratio:.4f}\t{ppl_test:.4f}", file=f, flush=True)
+    if args.sparsity_ratio == 0:
+        pathh = args.save.split("/")[0:2]
+        save_filepath = pathh[0] + "/" + pathh[1] + "/log_original.txt"
+    else:
+        if not os.path.exists(args.save):
+            os.makedirs(args.save)
+        save_filepath = os.path.join(args.save, f"log_{args.prune_method}.txt")
+        
+    with open(save_filepath, "a") as f:
+        print("*" * 50, file=f,flush=True)
+        print(f"Model: {args.model}", file=f, flush=True)
+        print(f"method: {args.prune_method}", file=f, flush=True)
+        print(f"actual_sparsity: {sparsity_ratio:.4f}", file=f, flush=True)
+        print(f"ppl_test: {ppl_test:.4f}", file=f, flush=True)
+        print(f"Model: {args.model}, method: {args.prune_method}, sparsity: {sparsity_ratio:.4f}, ppl_test: {ppl_test:.4f}\n")
+        
 
     if args.eval_zero_shot:
         accelerate=False
@@ -98,9 +109,15 @@ def main():
         task_list = ["boolq", "rte","hellaswag","winogrande", "arc_easy","arc_challenge", "openbookqa"]
         num_shot = 0
         results = eval_zero_shot(args.model, model, tokenizer, task_list, num_shot, accelerate)
-        print("********************************")
-        print("zero_shot evaluation results")
-        print(results)
+        print("-" * 30, file=f, flush=True)
+        print("zero_shot evaluation results", file=f, flush=True)
+        with open(save_filepath, "a") as f:
+            for task, res in results["results"].items():
+                acc = res.get("acc", None)
+                if acc is not None:
+                    print(f"{capitalize(task)}: accuracy = {acc:.4f}", file=f, flush=True)
+                else:
+                    print(f"{capitalize(task)}: {res}", file=f, flush=True)
 
     if args.save_model:
         model.save_pretrained(args.save_model)
